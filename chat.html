@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlowHook Chat App</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* Custom scrollbar */
+        .chat-messages::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .chat-messages::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+
+        .chat-messages::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 10px;
+        }
+
+        .chat-messages::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+
+        /* Animation for typing indicator */
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 0.5;
+            }
+
+            50% {
+                opacity: 1;
+            }
+        }
+
+        .typing-dot {
+            animation: pulse 1.5s infinite ease-in-out;
+        }
+
+        .typing-dot:nth-child(1) {
+            animation-delay: 0s;
+        }
+
+        .typing-dot:nth-child(2) {
+            animation-delay: 0.3s;
+        }
+
+        .typing-dot:nth-child(3) {
+            animation-delay: 0.6s;
+        }
+
+        /* Smooth transitions */
+        .message {
+            transition: all 0.3s ease;
+            transform-origin: bottom;
+        }
+
+        .message.sent {
+            animation: slideInRight 0.3s ease-out;
+        }
+
+        .message.received {
+            animation: slideInLeft 0.3s ease-out;
+        }
+
+        @keyframes slideInRight {
+            from {
+                transform: translateX(20px);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes slideInLeft {
+            from {
+                transform: translateX(-20px);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+
+<body class="bg-gray-100 h-screen flex items-center justify-center p-4">
+    <div class="flex flex-col w-full max-w-md h-[90vh] bg-white rounded-xl shadow-lg overflow-hidden">
+        <!-- Header -->
+        <div class="bg-indigo-600 text-white p-4 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-full bg-indigo-500 flex items-center justify-center">
+                    <i class="fas fa-robot text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold">NASA Space</h1>
+                    <p class="text-xs text-indigo-200">Conectado</p>
+                </div>
+            </div>
+            <button id="clear-chat" class="text-indigo-200 hover:text-white transition">
+                <i class="fas fa-trash-alt"></i>
+            </button>
+        </div>
+
+        <!-- Messages -->
+        <div id="chat-messages" class="chat-messages flex-1 p-4 overflow-y-auto space-y-3">
+            <div class="message received">
+                <div class="flex items-start space-x-2">
+                    <div class="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center">
+                        <i class="fas fa-robot text-indigo-600 text-sm"></i>
+                    </div>
+                    <div class="max-w-[70%]">
+                        <div class="bg-gray-100 text-gray-800 rounded-lg rounded-tl-none px-4 py-2">
+                            Bienvenido a NASA Space, como puedo ayudarte?
+                        </div>
+                        <p class="text-xs text-gray-500 mt-1">Ahora</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Typing indicator -->
+        <div id="typing-indicator" class="hidden px-4 pb-2">
+            <div class="flex items-center space-x-2">
+                <div class="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center">
+                    <i class="fas fa-robot text-indigo-600 text-sm"></i>
+                </div>
+                <div class="bg-gray-100 rounded-lg rounded-tl-none px-4 py-2">
+                    <div class="flex space-x-1">
+                        <div class="typing-dot w-2 h-2 bg-gray-500 rounded-full"></div>
+                        <div class="typing-dot w-2 h-2 bg-gray-500 rounded-full"></div>
+                        <div class="typing-dot w-2 h-2 bg-gray-500 rounded-full"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Input area -->
+        <div class="p-4 border-t border-gray-200">
+            <form id="message-form" class="flex space-x-2">
+                <input id="message-input" type="text" placeholder="Escribe tu pregunta"
+                    class="flex-1 border border-gray-300 rounded-full px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    autocomplete="off">
+                <button type="submit"
+                    class="w-10 h-10 rounded-full bg-indigo-600 text-white flex items-center justify-center hover:bg-indigo-700 transition">
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const messageForm = document.getElementById('message-form');
+            const messageInput = document.getElementById('message-input');
+            const chatMessages = document.getElementById('chat-messages');
+            const typingIndicator = document.getElementById('typing-indicator');
+            const clearChatBtn = document.getElementById('clear-chat');
+
+            // Webhook URL
+            const webhookUrl = 'https://flowhook.webpy.dev/webhook/7180b691-ca62-4ed9-8b87-e931eee287ed';
+
+            // Add message to chat
+            function addMessage(text, isUser = true) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message ${isUser ? 'sent' : 'received'}`;
+
+                const messageContent = `
+                    <div class="flex items-start space-x-2 ${isUser ? 'flex-row-reverse space-x-reverse' : ''}">
+                        <div class="w-8 h-8 rounded-full ${isUser ? 'bg-indigo-600' : 'bg-indigo-100'} flex items-center justify-center">
+                            <i class="${isUser ? 'fas fa-user text-white' : 'fas fa-robot text-indigo-600'} text-sm"></i>
+                        </div>
+                        <div class="max-w-[70%]">
+                            <div class="${isUser ? 'bg-indigo-600 text-white rounded-lg rounded-tr-none' : 'bg-gray-100 text-gray-800 rounded-lg rounded-tl-none'} px-4 py-2">
+                                ${text}
+                            </div>
+                            <p class="text-xs text-gray-500 mt-1 text-right">${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                        </div>
+                    </div>
+                `;
+
+                messageDiv.innerHTML = messageContent;
+                chatMessages.appendChild(messageDiv);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+
+            // Show typing indicator
+            function showTypingIndicator() {
+                typingIndicator.classList.remove('hidden');
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+
+            // Hide typing indicator
+            function hideTypingIndicator() {
+                typingIndicator.classList.add('hidden');
+            }
+
+            // Send message to webhook
+            async function sendToWebhook(message) {
+                showTypingIndicator();
+
+                try {
+                    const response = await fetch(webhookUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            message: message
+                        })
+                    });
+
+                    hideTypingIndicator();
+
+                    // Check if response is ok
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+
+                    // Get response as text first
+                    const responseText = await response.text();
+
+                    if (responseText.trim()) {
+                        // Try to parse as JSON first
+                        try {
+                            const data = JSON.parse(responseText);
+                            // Show only the output field content
+                            if (data.output) {
+                                addMessage(data.output, false);
+                            } else {
+                                addMessage("No response received", false);
+                            }
+                        } catch (jsonError) {
+                            // If not JSON, show as plain text
+                            addMessage(responseText, false);
+                        }
+                    } else {
+                        addMessage("Message sent successfully!", false);
+                    }
+
+                } catch (error) {
+                    hideTypingIndicator();
+
+                    // Handle specific error types
+                    if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+                        addMessage("Connection failed. This might be due to CORS restrictions or network issues. Please check your connection.", false);
+                    } else if (error.message.includes('HTTP error')) {
+                        addMessage(`Server error: ${error.message}. Please try again later.`, false);
+                    } else {
+                        addMessage("Sorry, I'm having trouble connecting to the server. Please try again later.", false);
+                    }
+
+                    console.error('Detailed error:', {
+                        name: error.name,
+                        message: error.message,
+                        stack: error.stack
+                    });
+                }
+            }
+
+            // Handle form submission
+            messageForm.addEventListener('submit', function (e) {
+                e.preventDefault();
+                const message = messageInput.value.trim();
+
+                if (message) {
+                    addMessage(message, true);
+                    messageInput.value = '';
+                    sendToWebhook(message);
+                }
+            });
+
+            // Clear chat
+            clearChatBtn.addEventListener('click', function () {
+                chatMessages.innerHTML = `
+                    <div class="message received">
+                        <div class="flex items-start space-x-2">
+                            <div class="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center">
+                                <i class="fas fa-robot text-indigo-600 text-sm"></i>
+                            </div>
+                            <div class="max-w-[70%]">
+                                <div class="bg-gray-100 text-gray-800 rounded-lg rounded-tl-none px-4 py-2">
+                                    Hello! I'm your FlowHook assistant. How can I help you today?
+                                </div>
+                                <p class="text-xs text-gray-500 mt-1">Justo ahora</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            // Allow pressing Enter to send message (but Shift+Enter for new line)
+            messageInput.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    messageForm.dispatchEvent(new Event('submit'));
+                }
+            });
+
+            // Focus input on load
+            messageInput.focus();
+        });
+    </script>
+</body>
+
+</html>
